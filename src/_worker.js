@@ -19,7 +19,7 @@ export default {
             return handleConvert(request, env);
         }
 
-        // Fallback ke static assets (index.html, dll)
+        // Fallback ke static assets (index.html, style.css, script.js)
         if (env.ASSETS) {
             return env.ASSETS.fetch(request);
         }
