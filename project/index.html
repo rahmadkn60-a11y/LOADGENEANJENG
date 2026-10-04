@@ -178,10 +178,26 @@
                     body: JSON.stringify({ code })
                 });
 
-                const data = await res.json();
+                // Baca raw text dulu, biar tau isinya apa kalau bukan JSON
+                const rawText = await res.text();
+
+                // Cek apakah response kosong
+                if (!rawText || rawText.trim() === '') {
+                    throw new Error(`Server balikin response kosong (HTTP ${res.status}). Cek log Worker di Cloudflare.`);
+                }
+
+                // Coba parse JSON
+                let data;
+                try {
+                    data = JSON.parse(rawText);
+                } catch (parseErr) {
+                    // Response bukan JSON — biasanya HTML error page atau Worker crash
+                    const preview = rawText.slice(0, 300);
+                    throw new Error(`Server balikin non-JSON (HTTP ${res.status}). Isi: ${preview}`);
+                }
 
                 if (!res.ok) {
-                    throw new Error(data.error || 'Gagal convert');
+                    throw new Error(data.error || `HTTP ${res.status}`);
                 }
 
                 currentLoadstring = data.loadstring;
@@ -192,8 +208,9 @@
 
             } catch (err) {
                 output.classList.add('empty');
-                output.textContent = 'Error. Coba lagi.';
+                output.textContent = 'Error. Cek status di bawah.';
                 setStatus('❌ ' + err.message, 'error');
+                console.error('[Convert Error]', err);
             } finally {
                 btnConvert.disabled = false;
                 btnConvert.textContent = '🔄 Convert & Upload';
