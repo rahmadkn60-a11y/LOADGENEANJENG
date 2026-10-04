@@ -1,28 +1,25 @@
 // functions/_worker.js
-// Vanz Auto Uploader — GitHub + Obfuscation Engine (MAX TIER)
-// Owner: rahmadkn60-a11y
-// Repo: LOADGENEANJENG
-// Powered by vanz Labs × Kairo
+// Vanz Auto Uploader — Backend
+// Handle: obfuscation + upload ke GitHub + return loadstring
 
 const GITHUB_API = 'https://api.github.com';
 
 export async function onRequest(context) {
     const { request, env } = context;
 
+    // CORS preflight
     if (request.method === 'OPTIONS') {
         return new Response(null, { headers: corsHeaders() });
     }
 
     const url = new URL(request.url);
 
+    // Endpoint utama: /convert
     if (request.method === 'POST' && url.pathname === '/convert') {
         return handleConvert(request, env);
     }
 
-    return new Response(JSON.stringify({ error: 'Not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders() }
-    });
+    return json({ error: 'Not found' }, 404);
 }
 
 function corsHeaders() {
@@ -33,42 +30,6 @@ function corsHeaders() {
     };
 }
 
-async function handleConvert(request, env) {
-    try {
-        const { code } = await request.json();
-
-        if (!code || typeof code !== 'string') {
-            return json({ error: 'Kode kosong atau invalid.' }, 400);
-        }
-
-        if (code.length > 500000) {
-            return json({ error: 'Kode kegedean, max 500KB.' }, 400);
-        }
-
-        // 1. Obfuscate MAX TIER
-        const obfuscated = obfuscateLua(code);
-
-        // 2. Random filename
-        const filename = generateRandomFilename();
-
-        // 3. Upload ke GitHub
-        const rawUrl = await uploadToGithub(obfuscated, filename, env);
-
-        // 4. Loadstring
-        const loadstring = `loadstring(game:HttpGet("${rawUrl}"))()`;
-
-        return json({
-            success: true,
-            filename,
-            rawUrl,
-            loadstring
-        });
-
-    } catch (err) {
-        return json({ error: err.message || 'Internal error' }, 500);
-    }
-}
-
 function json(obj, status = 200) {
     return new Response(JSON.stringify(obj), {
         status,
@@ -77,28 +38,60 @@ function json(obj, status = 200) {
 }
 
 // ============================================================
+// HANDLER: CONVERT
+// ============================================================
+async function handleConvert(request, env) {
+    try {
+        const { code } = await request.json();
+
+        if (!code || typeof code !== 'string') {
+            return json({ error: 'Kode kosong atau invalid.' }, 400);
+        }
+        if (code.length > 500000) {
+            return json({ error: 'Kode kegedean, max 500KB.' }, 400);
+        }
+
+        // 1. Obfuscate MAX TIER
+        const obfuscated = obfuscateLua(code);
+
+        // 2. Random filename (32 char hex)
+        const filename = generateRandomFilename();
+
+        // 3. Upload ke GitHub
+        const rawUrl = await uploadToGithub(obfuscated, filename, env);
+
+        // 4. Loadstring
+        const loadstring = `loadstring(game:HttpGet("${rawUrl}"))()`;
+
+        return json({ success: true, filename, rawUrl, loadstring });
+
+    } catch (err) {
+        return json({ error: err.message || 'Internal error' }, 500);
+    }
+}
+
+// ============================================================
 // OBFUSCATION ENGINE — MAX TIER
-// Layer 1 : Pre-processing (strip comments, collapse whitespace)
-// Layer 2 : String encryption (semua string literal dienkripsi)
-// Layer 3 : Control flow wrap (IIFE + marker)
-// Layer 4 : Multi-round XOR + bit rotation + chunk shuffle + offset walk
-// Layer 5 : Loader dengan runtime decode
-// Layer 6 : Anti-debug guard (cek loadstring tersedia)
-// Hasil : practically deobf-resistant
+// Layer 1 : Strip komentar + collapse whitespace
+// Layer 2 : Encrypt semua string literal jadi byte array
+// Layer 3 : Wrap dalam IIFE (control flow misdirection)
+// Layer 4 : XOR + bit rotation + chunk shuffle + offset walk
+// Layer 5 : Encode ke hex
+// Layer 6 : Loader Lua dengan random variable names
 // ============================================================
 
 function obfuscateLua(source) {
-    // --- Layer 1: pre-process ---
+    // Layer 1
     let cleaned = stripComments(source);
     cleaned = collapseWhitespace(cleaned);
 
-    // --- Layer 2: string encryption ---
+    // Layer 2
     cleaned = encryptStringLiterals(cleaned);
 
-    // --- Layer 3: control flow wrap ---
+    // Layer 3
     cleaned = flattenControlFlow(cleaned);
 
-    // --- Layer 4: byte-level encoding ---
+    // Layer 4
     const bytes = new TextEncoder().encode(cleaned);
     const arr = Array.from(bytes);
 
@@ -118,13 +111,12 @@ function obfuscateLua(source) {
     const mulKey = 3 + Math.floor(Math.random() * 5);
     const offseted = chunked.map((b, i) => (b + offsetKey + ((i * mulKey) % 11)) & 0xFF);
 
+    // Layer 5
     const encoded = offseted.map(b => b.toString(16).padStart(2, '0')).join('');
 
-    // --- Layer 5 & 6: loader ---
+    // Layer 6
     const v = randomVarNames(12);
-    const loader = buildAdvancedLoader(encoded, key, offsetKey, mulKey, v);
-
-    return loader;
+    return buildLoader(encoded, key, offsetKey, mulKey, v);
 }
 
 function stripComments(src) {
@@ -212,7 +204,7 @@ function randomVarNames(count) {
     return names;
 }
 
-function buildAdvancedLoader(hexData, key, offsetKey, mulKey, v) {
+function buildLoader(hexData, key, offsetKey, mulKey, v) {
     const [a, b, c, d, e, f, g, h, i2, j2, k2, l2] = v;
 
     const loader = `
@@ -275,7 +267,7 @@ async function uploadToGithub(content, filename, env) {
         throw new Error('GITHUB_TOKEN belum di-set di environment variables.');
     }
 
-    // Safety: cek collision
+    // Cek collision (safety, kemungkinan kecil banget)
     const checkRes = await fetch(
         `${GITHUB_API}/repos/${owner}/${repo}/contents/${filename}?ref=${branch}`,
         {
