@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vanz Auto Uploader — Lua to Loadstring</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #0a0a0f;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            width: 100%;
+            max-width: 720px;
+            background: #12121a;
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 0 60px rgba(0, 255, 136, 0.08);
+            border: 1px solid #1e1e2e;
+        }
+        h1 {
+            font-size: 1.6rem;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, #00ff88, #00ccff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .sub {
+            color: #888;
+            font-size: 0.85rem;
+            margin-bottom: 24px;
+        }
+        textarea {
+            width: 100%;
+            height: 220px;
+            background: #0a0a0f;
+            border: 1px solid #2a2a3a;
+            border-radius: 10px;
+            padding: 16px;
+            color: #e0e0e0;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 0.85rem;
+            resize: vertical;
+            outline: none;
+            transition: border 0.2s;
+        }
+        textarea:focus {
+            border-color: #00ff88;
+        }
+        .row {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        button {
+            flex: 1;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        #btnConvert {
+            background: linear-gradient(135deg, #00ff88, #00cc66);
+            color: #0a0a0f;
+        }
+        #btnConvert:hover { opacity: 0.85; }
+        #btnConvert:disabled {
+            background: #2a2a3a;
+            color: #666;
+            cursor: not-allowed;
+        }
+        #btnCopy {
+            background: #1e1e2e;
+            color: #00ff88;
+            border: 1px solid #00ff88;
+        }
+        #btnCopy:hover { background: #00ff8820; }
+        #btnCopy:disabled {
+            border-color: #333;
+            color: #444;
+            cursor: not-allowed;
+        }
+        .output {
+            margin-top: 16px;
+            background: #0a0a0f;
+            border: 1px solid #2a2a3a;
+            border-radius: 10px;
+            padding: 16px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.85rem;
+            color: #00ff88;
+            word-break: break-all;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+        }
+        .output.empty {
+            color: #555;
+            font-style: italic;
+        }
+        .status {
+            margin-top: 12px;
+            font-size: 0.8rem;
+            color: #888;
+            text-align: center;
+        }
+        .status.error { color: #ff5555; }
+        .status.success { color: #00ff88; }
+        .footer {
+            margin-top: 24px;
+            text-align: center;
+            font-size: 0.75rem;
+            color: #444;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚡ Vanz Auto Uploader</h1>
+        <p class="sub">Paste kode Lua → Convert → Upload ke GitHub → Loadstring otomatis</p>
+
+        <textarea id="inputCode" placeholder="-- Paste kode Lua/Luau lu di sini..."></textarea>
+
+        <div class="row">
+            <button id="btnConvert">🔄 Convert & Upload</button>
+            <button id="btnCopy" disabled>📋 Copy Loadstring</button>
+        </div>
+
+        <div class="output empty" id="output">Hasil loadstring bakal muncul di sini...</div>
+        <div class="status" id="status"></div>
+
+        <div class="footer">
+            Powered by vanz Labs × Kairo
+        </div>
+    </div>
+
+    <script>
+        const inputCode = document.getElementById('inputCode');
+        const btnConvert = document.getElementById('btnConvert');
+        const btnCopy = document.getElementById('btnCopy');
+        const output = document.getElementById('output');
+        const status = document.getElementById('status');
+
+        let currentLoadstring = '';
+
+        // Ganti URL ini dengan URL Worker lu setelah deploy
+        const WORKER_URL = 'https://YOUR_WORKER_NAME.YOUR_SUBDOMAIN.workers.dev';
+
+        btnConvert.addEventListener('click', async () => {
+            const code = inputCode.value.trim();
+            if (!code) {
+                setStatus('Kode masih kosong, bro. Paste dulu.', 'error');
+                return;
+            }
+
+            btnConvert.disabled = true;
+            btnConvert.textContent = '⏳ Processing...';
+            setStatus('Mengirim ke server...', '');
+            output.classList.add('empty');
+            output.textContent = 'Processing...';
+
+            try {
+                const res = await fetch(WORKER_URL + '/convert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.error || 'Gagal convert');
+                }
+
+                currentLoadstring = data.loadstring;
+                output.classList.remove('empty');
+                output.textContent = currentLoadstring;
+                btnCopy.disabled = false;
+                setStatus('✅ Berhasil! Loadstring udah siap.', 'success');
+
+            } catch (err) {
+                output.classList.add('empty');
+                output.textContent = 'Error. Coba lagi.';
+                setStatus('❌ ' + err.message, 'error');
+            } finally {
+                btnConvert.disabled = false;
+                btnConvert.textContent = '🔄 Convert & Upload';
+            }
+        });
+
+        btnCopy.addEventListener('click', async () => {
+            if (!currentLoadstring) return;
+            try {
+                await navigator.clipboard.writeText(currentLoadstring);
+                setStatus('📋 Loadstring udah di-copy ke clipboard!', 'success');
+                btnCopy.textContent = '✅ Copied!';
+                setTimeout(() => { btnCopy.textContent = '📋 Copy Loadstring'; }, 2000);
+            } catch (err) {
+                setStatus('Gagal copy: ' + err.message, 'error');
+            }
+        });
+
+        function setStatus(msg, type) {
+            status.textContent = msg;
+            status.className = 'status' + (type ? ' ' + type : '');
+        }
+    </script>
+</body>
+</html>
