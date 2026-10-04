@@ -1,5 +1,7 @@
 // functions/_worker.js
 // Vanz Auto Uploader — Backend
+// Owner: rahmadkn60-a11y
+// Repo: HasilGeneMbt
 // Handle: obfuscation + upload ke GitHub + return loadstring
 
 const GITHUB_API = 'https://api.github.com';
@@ -260,7 +262,7 @@ function generateRandomFilename() {
 async function uploadToGithub(content, filename, env) {
     const token = env.GITHUB_TOKEN;
     const owner = env.GITHUB_OWNER || 'rahmadkn60-a11y';
-    const repo = env.GITHUB_REPO || 'LOADGENEANJENG';
+    const repo = env.GITHUB_REPO || 'HasilGeneMbt';
     const branch = env.GITHUB_BRANCH || 'main';
 
     if (!token) {
