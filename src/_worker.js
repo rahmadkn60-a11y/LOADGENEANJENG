@@ -1,28 +1,32 @@
-// functions/_worker.js
-// Vanz Auto Uploader — Backend
+// src/worker.js
+// Vanz Auto Uploader — Backend (Cloudflare Workers)
 // Owner: rahmadkn60-a11y
 // Repo: HasilGeneMbt
-// Handle: obfuscation + upload ke GitHub + return loadstring
 
 const GITHUB_API = 'https://api.github.com';
 
-export async function onRequest(context) {
-    const { request, env } = context;
+export default {
+    async fetch(request, env, ctx) {
+        const url = new URL(request.url);
 
-    // CORS preflight
-    if (request.method === 'OPTIONS') {
-        return new Response(null, { headers: corsHeaders() });
+        // CORS preflight
+        if (request.method === 'OPTIONS') {
+            return new Response(null, { headers: corsHeaders() });
+        }
+
+        // Endpoint: /convert
+        if (request.method === 'POST' && url.pathname === '/convert') {
+            return handleConvert(request, env);
+        }
+
+        // Fallback ke static assets (index.html, dll)
+        if (env.ASSETS) {
+            return env.ASSETS.fetch(request);
+        }
+
+        return json({ error: 'Not found' }, 404);
     }
-
-    const url = new URL(request.url);
-
-    // Endpoint utama: /convert
-    if (request.method === 'POST' && url.pathname === '/convert') {
-        return handleConvert(request, env);
-    }
-
-    return json({ error: 'Not found' }, 404);
-}
+};
 
 function corsHeaders() {
     return {
@@ -53,16 +57,9 @@ async function handleConvert(request, env) {
             return json({ error: 'Kode kegedean, max 500KB.' }, 400);
         }
 
-        // 1. Obfuscate MAX TIER
         const obfuscated = obfuscateLua(code);
-
-        // 2. Random filename (32 char hex)
         const filename = generateRandomFilename();
-
-        // 3. Upload ke GitHub
         const rawUrl = await uploadToGithub(obfuscated, filename, env);
-
-        // 4. Loadstring
         const loadstring = `loadstring(game:HttpGet("${rawUrl}"))()`;
 
         return json({ success: true, filename, rawUrl, loadstring });
@@ -74,26 +71,14 @@ async function handleConvert(request, env) {
 
 // ============================================================
 // OBFUSCATION ENGINE — MAX TIER
-// Layer 1 : Strip komentar + collapse whitespace
-// Layer 2 : Encrypt semua string literal jadi byte array
-// Layer 3 : Wrap dalam IIFE (control flow misdirection)
-// Layer 4 : XOR + bit rotation + chunk shuffle + offset walk
-// Layer 5 : Encode ke hex
-// Layer 6 : Loader Lua dengan random variable names
 // ============================================================
 
 function obfuscateLua(source) {
-    // Layer 1
     let cleaned = stripComments(source);
     cleaned = collapseWhitespace(cleaned);
-
-    // Layer 2
     cleaned = encryptStringLiterals(cleaned);
-
-    // Layer 3
     cleaned = flattenControlFlow(cleaned);
 
-    // Layer 4
     const bytes = new TextEncoder().encode(cleaned);
     const arr = Array.from(bytes);
 
@@ -113,10 +98,8 @@ function obfuscateLua(source) {
     const mulKey = 3 + Math.floor(Math.random() * 5);
     const offseted = chunked.map((b, i) => (b + offsetKey + ((i * mulKey) % 11)) & 0xFF);
 
-    // Layer 5
     const encoded = offseted.map(b => b.toString(16).padStart(2, '0')).join('');
 
-    // Layer 6
     const v = randomVarNames(12);
     return buildLoader(encoded, key, offsetKey, mulKey, v);
 }
@@ -269,7 +252,6 @@ async function uploadToGithub(content, filename, env) {
         throw new Error('GITHUB_TOKEN belum di-set di environment variables.');
     }
 
-    // Cek collision (safety, kemungkinan kecil banget)
     const checkRes = await fetch(
         `${GITHUB_API}/repos/${owner}/${repo}/contents/${filename}?ref=${branch}`,
         {
@@ -286,10 +268,8 @@ async function uploadToGithub(content, filename, env) {
         return uploadToGithub(content, newName, env);
     }
 
-    // Encode base64
     const base64Content = btoa(unescape(encodeURIComponent(content)));
 
-    // Upload
     const uploadRes = await fetch(
         `${GITHUB_API}/repos/${owner}/${repo}/contents/${filename}`,
         {
